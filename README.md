@@ -1,4 +1,26 @@
-# ETH grid bot — Phase 1 (dry run)
+# Trading bots (dry run only)
+
+Two families of automated trading bots — crypto (this folder) and stocks
+(`stock_bots/`) — that scan a market, buy dips, and sell at a target. **None
+of them place a real order, ever, in any mode built so far.** Every bot only
+simulates fills against real, live (or historical, for backtests) prices and
+logs everything, so the strategies can be watched and tuned risk-free before
+anyone decides whether to trade for real.
+
+## Repo layout
+
+| Folder | Venue | What's in it |
+|---|---|---|
+| `.` (this folder) | Coinbase (ETH) | `grid_bot.py` (grid trading) + `trend_bot.py` (moving-average trend following), backtests, analysis tools, live-venue readiness check. Documented in full below. |
+| `stock_bots/` | Questrade (equities) | `grid_bot_stock.py` / `trend_bot_stock.py` (single fixed symbol, same engine as the crypto bots) and `grid_bot_watchlist.py` (scans a list of stocks and buys the best dip across all of them, with re-anchoring, a profit-lock time-stop, and a real stop-loss). Backtesting tools and a 50+ test suite included. See [`stock_bots/README.md`](stock_bots/README.md) for full detail. |
+
+Both families share the same engine philosophy: a grid buys fixed-percentage
+dips and sells at a fixed take-profit, risk rails cap capital/losses at the
+portfolio level, every new feature defaults **off** until it's been backtested
+and someone deliberately turns it on, and nothing runs live without an
+explicit, separate decision later.
+
+## Coinbase ETH grid bot — Phase 1 (dry run)
 
 A grid-trading agent for ETH built to the spec you provided. **This build never
 places a real order.** It polls a public ETH‑USD price, runs the full grid +

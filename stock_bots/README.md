@@ -86,16 +86,64 @@ only one active at a time:
 - **`"grid_depth"` (built, INACTIVE)** — ranks by how many grid rungs deep
   each symbol has fallen. Pure grid mechanics, no volatility involved. Switch
   `ranking.mode` to `"grid_depth"` in `watchlist_config.json` to try it
-  instead — it's fully implemented and unit-tested (`test_watchlist.py`),
-  just not the default while option 3 is what's being evaluated.
+  instead — it's fully implemented and unit-tested, just not the default
+  while `vol_normalized_dip` is what's been evaluated more.
 
-Run `python test_watchlist.py` any time to re-verify both ranking rules —
-including a scenario that proves the shared-capital contention case: when two
-symbols both qualify in the same poll but there's only enough budget for one,
-the better-ranked symbol wins, not whichever happened to be checked first.
+Run `python test_watchlist.py` any time to re-verify (57 checks) — including
+a scenario that proves the shared-capital contention case: when two symbols
+both qualify in the same poll but there's only enough budget for one, the
+better-ranked symbol wins, not whichever happened to be checked first.
 
 Same flags (`--once`/`--status`/`--summary`/`--reset`/`--test-notify`), same
 market-hours gate, logs to `stock_bots/logs/watchlist_*`.
+
+### Risk features on the watchlist bot (all backtested — see `backtest_watchlist.py`)
+
+Unlike the single-symbol stock bots, these have been through repeated 12/24-month
+backtests and several are **on by default** in `watchlist_config.json`:
+
+- **Take-profit: 8%** (`grid.take_profit_pct`) — landed on after sweeping
+  3/4/6/8/10/12% over 12 and 24 months; consistently the best performer.
+- **Re-anchoring: ON** (`reanchor.enabled`, 8% breakout) — without this, a
+  symbol that runs away from its original anchor (e.g. a stock on a long
+  uptrend) permanently stops generating new entries, since its rungs — all
+  below a now-stale anchor — never get reached again. Only reshapes while
+  flat in that symbol.
+- **Profit-lock time-stop: ON** (`risk.max_hold_enabled`, 10 days / 4% floor)
+  — force-closes a stale position, but *only* if it's already up at least 4%.
+  This is **not** a stop-loss: a stale losing position is deliberately left
+  alone by this mechanism and keeps waiting for its real take-profit target.
+- **Stop-loss: ON** (`risk.stop_loss_enabled`, 35%) — the actual loss-cutter.
+  Fires immediately (no time gate) the moment price falls 35% below a
+  position's entry, as a real stop order (taker fee + slippage), not a
+  resting limit. Chosen after sweeping 25/30/35/40% — all landed within ~4.5%
+  of each other on total return, with 35% the best balance of return and
+  unresolved open-position risk. No cooldown on re-entry (tried a 10h
+  cooldown, removed — it cost real return for little benefit at this bot's
+  poll cadence).
+- **Post-stop-loss price watch**: when a stop-loss fires, that symbol gets a
+  non-pinging Discord price check-in every `execution.price_notify_interval_sec`
+  (default 5 min) until market close that day, then it stops automatically.
+  Quiet on any day with no stop-loss. A routine stop-loss notification itself
+  is a separate, always-pinging Discord alert (`event="alert"`, ignores
+  whatever `notifications.mention_events` says about plain sells) since it's
+  a risk event, not routine profit-taking.
+
+### Backtesting the watchlist bot
+
+```bash
+python backtest_watchlist.py --months 24                          # ranking-mode comparison
+python backtest_watchlist.py --months 24 --tp-sweep 6,8,10         # compare take-profit levels
+python backtest_watchlist.py --months 24 --sl-sweep 25,30,35,40    # compare stop-loss distances
+python backtest_watchlist.py --months 24 --max-capital-override 1500   # stress-test ranking under real capital scarcity
+```
+
+Replays real Questrade daily candles through the actual production code
+(`grid_bot_watchlist.iterate()` / `process_fills()`) — not a reimplementation.
+Daily-bar resolution, not hourly like the crypto bot's `backtest.py` — see
+each report's methodology note for what that means for accuracy. Every flag
+overrides `watchlist_config.json` for that run only; nothing it does touches
+the live config or `watchlist_state.json`.
 
 ## What's actually different from the crypto bots
 
@@ -118,12 +166,14 @@ market-hours gate, logs to `stock_bots/logs/watchlist_*`.
   change `tranche_size_usd` / `allocated_capital_usd` a lot, or trade a very
   cheap/expensive stock, re-check against Questrade's published schedule for
   your account and adjust.
-- **Adaptive features default OFF**: the crypto grid bot's `adaptations`
-  block (trend filter, re-anchor, max-hold, breakout-buy, vol-spacing) has
-  been tuned/backtested for ETH specifically. None of that carries over to
-  equities automatically, so every adaptation here starts `false` — same
-  "off until you deliberately test it" rule used for the crypto bot's
-  breakout-buy feature.
+- **Adaptive features default OFF on the single-symbol stock bots**
+  (`grid_bot_stock.py` / `trend_bot_stock.py`): the crypto grid bot's
+  `adaptations` block (trend filter, re-anchor, max-hold, breakout-buy,
+  vol-spacing) was tuned/backtested for ETH specifically and doesn't carry
+  over to equities automatically, so every adaptation in `config.json` starts
+  `false` there. The **watchlist bot is the exception** — its risk features
+  (re-anchor, profit-lock, stop-loss) have each been through their own
+  equity-specific backtests and are enabled by default; see the section above.
 
 ## Canada-specific notes (recap from the earlier conversation)
 
@@ -146,9 +196,12 @@ market-hours gate, logs to `stock_bots/logs/watchlist_*`.
 
 ## Known cosmetic detail
 
-Internally, tranche/trade records still use field names inherited from the
-crypto engine (e.g. `qty_eth` in `state.json`/`trades.csv`) — these represent
-**shares of whatever `asset` you configured**, not literal ETH. Discord/log
-messages were generalized to show the real symbol (`asset_symbol()` in
-`grid_bot.py`), but the underlying JSON/CSV key names were left alone to stay
-byte-for-byte compatible with the already-tested engine code.
+On `grid_bot_stock.py` / `trend_bot_stock.py` specifically (which import and
+reuse the crypto engine directly), tranche/trade records still use field
+names inherited from that engine (e.g. `qty_eth` in `state.json`/`trades.csv`)
+— these represent **shares of whatever `asset` you configured**, not literal
+ETH. Discord/log messages were generalized to show the real symbol
+(`asset_symbol()` in `grid_bot.py`), but the underlying JSON/CSV key names
+were left alone to stay byte-for-byte compatible with the already-tested
+engine code. The watchlist bot has its own schema (built fresh, not reused)
+and just calls this field `qty`.
