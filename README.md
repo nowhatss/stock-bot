@@ -7,6 +7,8 @@ simulates fills against real, live (or historical, for backtests) prices and
 logs everything, so the strategies can be watched and tuned risk-free before
 anyone decides whether to trade for real.
 
+pls let me know if you have any suggestions
+
 ## Repo layout
 
 | Folder | Venue | What's in it |
