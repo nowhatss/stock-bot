@@ -1,0 +1,79 @@
+{
+  "watchlist_symbols": ["AVGO", "AMD", "NVDA", "ARM", "INTC", "MRVL", "QCOM"],
+  "_watchlist_note": "Placeholder list -- put whatever stocks you want the bot scanning. Keep it a manageable size (a handful to a few dozen); each poll fetches ONE batched quote call for the whole list regardless of count, but the daily candle refresh (recent high + volatility) is one call PER symbol, at most once an hour -- a very long list adds up there.",
+
+  "allocated_capital_usd": 10000.0,
+
+  "grid": {
+    "num_levels": 3,
+    "grid_spacing_pct": 5.0,
+    "tranche_size_usd": 1500.0,
+    "take_profit_pct": 8.0,
+    "_comment": "The SAME grid shape is applied to every symbol in the watchlist -- no per-symbol overrides in this first version. Each symbol gets its own anchor (set on its first quote) and its own set of rungs, exactly like grid_bot_stock.py, just replicated across the whole list."
+  },
+
+  "risk": {
+    "max_capital_deployed_usd": 9000.0,
+    "hard_stop_loss_pct": 50.0,
+    "max_trades_per_day": 7,
+    "max_daily_loss_pct": 40.0,
+    "max_tranches_per_symbol": 1,
+    "max_hold_enabled": true,
+    "max_hold_days": 10,
+    "max_hold_min_profit_pct": 4.0,
+    "stop_loss_enabled": true,
+    "stop_loss_pct": 35.0,
+    "_comment": "max_tranches_per_symbol caps how many open positions the bot can hold in any ONE symbol at a time, so the shared capital pool doesn't all pile into whichever stock happens to keep ranking best -- this is what makes it an actual watchlist bot instead of an accidental single-stock bot. Everything else here is the same shared-pool risk rail as the other bots, just evaluated across ALL open tranches regardless of symbol.",
+    "_max_hold_note": "ENABLED. A tranche held longer than max_hold_days is force-closed at the CURRENT price (taker + slippage) -- but ONLY if it's already up at least max_hold_min_profit_pct. This is a profit-lock, not a stop-loss: it exists so a high grid.take_profit_pct can still run under normal conditions, without capital sitting tied up indefinitely chasing a stretch target once a solid, already-real gain is on the table. A stale tranche still below the profit floor -- including an underwater one -- is left alone by this and keeps waiting for its real take-profit target; stop_loss_enabled below is what actually caps a loss.",
+    "_stop_loss_note": "ENABLED at 35% (backtested 24mo: 25/30/35/40% all landed within ~4.5% of each other on total P&L; 35% had the best total P&L and the smallest unresolved open-position risk of the four). A tranche is force-closed immediately (taker + slippage) the moment price falls stop_loss_pct below its OWN entry price -- no time gate, unlike max_hold above. This is the real loss-cutter; max_hold deliberately never cuts a loss on its own. It always fires an @everyone Discord alert regardless of notifications.mention_events, since it's a risk event, not routine profit-taking. No cooldown after a stop-out -- if the symbol's rung is still at/below its level on the very next poll, it can re-buy immediately (tried a 10h cooldown, removed -- it cost ~3.6% of total return in backtest for little benefit at this bot's poll cadence)."
+  },
+
+  "reanchor": {
+    "enabled": true,
+    "breakout_pct": 8.0,
+    "_comment": "ENABLED. If a symbol's price rises breakout_pct% above its own anchor WHILE FLAT in that symbol, the anchor moves to the current price and the rungs rebuild there. Without this, a symbol that runs away from its original anchor (e.g. a stock on a long uptrend) simply stops generating any new entries for the rest of the bot's life, since its rungs -- all below a now-stale anchor -- never get reached again. Never reshapes while holding a position in that symbol."
+  },
+
+  "ranking": {
+    "mode": "vol_normalized_dip",
+    "_mode_options": "vol_normalized_dip (ACTIVE) | grid_depth (built, INACTIVE -- switch this string to try it instead)",
+    "min_dip_pct": 1.0,
+    "min_vol_pct_floor": 0.5,
+    "vol_lookback_days": 20,
+    "high_lookback_days": 20,
+    "_comment": "vol_normalized_dip ranks every symbol whose rung has been reached by (% below its own N-day high) / (its own recent daily volatility, floored at min_vol_pct_floor so a near-zero-vol stock doesn't get an absurd score) -- the best-scoring one gets the tranche first when several symbols qualify in the same poll. min_dip_pct additionally excludes symbols that haven't genuinely dipped much at all, even if their rung technically triggered. grid_depth (inactive) instead ranks by how many grid rungs deep each symbol's price has fallen -- pure grid mechanics, no volatility involved. Either way, a symbol still has to have a real armed+primed+reached rung to be considered at all -- the ranking rule only decides who wins when more than one symbol qualifies on the same poll."
+  },
+
+  "fees": {
+    "fee_rate_per_side": 0.0017,
+    "fee_rate_maker": 0.0017,
+    "fee_rate_taker": 0.0017,
+    "_comment": "Same Questrade commission approximation as the single-symbol stock bot -- see stock_bots/README.md."
+  },
+
+  "execution": {
+    "mode": "dry_run",
+    "poll_interval_sec": 60,
+    "heartbeat_interval_sec": 300,
+    "price_notify_interval_sec": 300,
+    "shallow_touch_pct": 0.15,
+    "shallow_fill_prob": 0.5,
+    "market_slippage_bps": 8,
+    "fill_seed": 12345,
+    "log_previews": true,
+    "_comment": "Same resting-order fill model as the other bots -- see the main config.json for the full explanation.",
+    "_price_notify_note": "NOT a constant drip -- only fires for a symbol that had a stop-loss THAT DAY, every price_notify_interval_sec (default 300s / 5 min) until market close, then stops automatically once the date rolls over. On a day with no stop-loss, sends nothing. Purely informational: uses a notification type that never pings, regardless of notifications.mention_events below. Set to 0 to disable entirely."
+  },
+
+  "price_feed": {
+    "timeout_sec": 10
+  },
+
+  "notifications": {
+    "enabled": true,
+    "discord_webhook_url": null,
+    "mention": "@everyone",
+    "mention_events": ["alert", "buy", "sell"],
+    "_comment": "Same shape as the other bots' config -- env var GRID_BOT_DISCORD_WEBHOOK is reused if discord_webhook_url is null."
+  }
+}

@@ -1,0 +1,8 @@
+# Phase 1 (dry run) needs NONE of these -- grid_bot.py is stdlib-only.
+# These are only for the live Coinbase Advanced Trade path (live_preview / confirm / live)
+# and for check_venue.py.
+#
+#   python -m venv .venv
+#   .venv\Scripts\python -m pip install -r requirements.txt
+#
+coinbase-advanced-py==1.8.4

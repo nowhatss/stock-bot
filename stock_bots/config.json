@@ -1,0 +1,92 @@
+{
+  "asset": "AAPL",
+  "_asset_note": "Placeholder symbol -- change to whatever stock you want to dry-run (any symbol Questrade can quote). Not investment advice; pick something liquid so quotes/candles behave normally.",
+  "allocated_capital_usd": 10000.0,
+
+  "grid": {
+    "num_levels": 3,
+    "grid_spacing_pct": 5.0,
+    "tranche_size_usd": 3000.0,
+    "take_profit_pct": 4.0,
+    "anchor_price": null,
+    "reanchor_on_new_high_pct": null
+  },
+
+  "risk": {
+    "max_capital_deployed_usd": 9000.0,
+    "hard_stop_loss_pct": 50.0,
+    "max_trades_per_day": 7,
+    "max_daily_loss_pct": 40.0
+  },
+
+  "fees": {
+    "_comment": "Questrade's real equity commission is ~$0.01/share, min $4.95, max $9.95 PER TRADE -- not a clean percentage like Coinbase's maker/taker split. These rates approximate that for a trade around grid.tranche_size_usd ($3000): e.g. a $150 stock -> 20 shares x $0.01 = $0.20, but that hits the $4.95 minimum, so $4.95 / $3000 ~= 0.165%. If you change tranche_size_usd a lot, or trade a very cheap/expensive stock, re-check against Questrade's published commission schedule for your account and adjust these rates.",
+    "fee_rate_per_side": 0.0017,
+    "fee_rate_maker": 0.0017,
+    "fee_rate_taker": 0.0017
+  },
+
+  "adaptations": {
+    "_comment": "All OFF by default -- unlike the crypto grid bot, none of these have been backtested for equities yet. Turn them on deliberately (and ideally backtest first) rather than assuming the crypto-tuned values carry over.",
+
+    "reanchor_enabled": false,
+    "reanchor_breakout_pct": 8.0,
+    "reanchor_after_stopout": false,
+    "min_reshape_hours": 6.0,
+
+    "trend_filter_enabled": false,
+    "trend_ma_days": 20,
+    "trend_pause_buffer_pct": 2.0,
+    "trend_resume_buffer_pct": 1.0,
+
+    "vol_spacing_enabled": false,
+    "vol_lookback_days": 20,
+    "vol_reference_daily_pct": 2.0,
+    "vol_mult_min": 0.75,
+    "vol_mult_max": 1.6,
+    "vol_scales_take_profit": true,
+
+    "max_hold_enabled": false,
+    "max_hold_days": 10,
+    "max_hold_only_if_underwater": true,
+    "max_hold_cooldown_hours": 48,
+
+    "breakout_buy_enabled": false,
+    "breakout_buy_pct": 8.0,
+    "breakout_lookback_hours": 24.0,
+    "breakout_tranche_size_usd": null,
+    "breakout_cooldown_hours": 24.0
+  },
+
+  "execution": {
+    "mode": "dry_run",
+    "_mode_options": "dry_run = simulated price + simulated fills, no API calls that place orders. Only dry_run is implemented -- this is a Phase 1 build, same as the crypto grid bot.",
+    "poll_interval_sec": 60,
+    "heartbeat_interval_sec": 300,
+    "fill_model": "resting",
+    "shallow_touch_pct": 0.15,
+    "shallow_fill_prob": 0.5,
+    "market_slippage_bps": 8,
+    "fill_seed": 12345,
+    "log_previews": true,
+    "_comment": "Same fill model as the crypto grid bot -- see the main config.json for the full explanation. Quotes come from Questrade instead of Coinbase; see venue_questrade.py."
+  },
+
+  "price_feed": {
+    "timeout_sec": 10
+  },
+
+  "idle_yield": {
+    "enabled": false,
+    "apy_pct": 4.0,
+    "_comment": "Off by default. If you enable it, set apy_pct to whatever your actual Questrade cash/HISA rate is -- 4.5% was a reasonable USDC assumption for the crypto bot, not a Canadian-dollar cash rate."
+  },
+
+  "notifications": {
+    "enabled": true,
+    "discord_webhook_url": null,
+    "mention": "@everyone",
+    "mention_events": ["alert", "buy", "sell"],
+    "_comment": "Same shape as the crypto bots' config -- env var GRID_BOT_DISCORD_WEBHOOK is reused if discord_webhook_url is null, so all four bots (grid, trend, grid_stock, trend_stock) can post to the same channel without re-entering the URL."
+  }
+}

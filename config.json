@@ -1,0 +1,100 @@
+{
+  "_SCALE_NOTE": "DRY-RUN SCALE ONLY. Capital scaled x100 ($100 -> $10,000) on 2026-09-10 to see larger simulated numbers. Percentages, level count, spacing, take-profit, and max trades/day are unchanged - scaling capital does NOT make it trade sooner (only price moves or tighter spacing do). BEFORE going live, reset allocated_capital_usd=100, tranche_size_usd=30, max_capital_deployed_usd=90 (or whatever you actually fund).",
+  "asset": "ETH-USD",
+  "allocated_capital_usd": 10000.0,
+
+  "grid": {
+    "num_levels": 3,
+    "grid_spacing_pct": 5.0,
+    "tranche_size_usd": 3000.0,
+    "take_profit_pct": 4.0,
+    "anchor_price": null,
+    "reanchor_on_new_high_pct": null
+  },
+
+  "risk": {
+    "max_capital_deployed_usd": 9000.0,
+    "hard_stop_loss_pct": 50.0,
+    "max_trades_per_day": 7,
+    "max_daily_loss_pct": 40.0
+  },
+
+  "fees": {
+    "_comment": "Per-side fee assumptions for the dry run. maker = resting limit fill (grid buys + take-profit sells). taker = market/forced fill (max-hold exits, gap-through fills). fee_rate_per_side is the legacy single rate used by the at_level / at_poll fill models.",
+    "fee_rate_per_side": 0.006,
+    "fee_rate_maker": 0.006,
+    "fee_rate_taker": 0.012
+  },
+
+  "adaptations": {
+    "_comment": "Rule-based adaptations. Each block is off unless its *_enabled flag is true. Grid geometry (anchor + spacing) only ever changes while NO tranches are open. Trend filter and vol spacing need daily candles from market_data.py (Coinbase public endpoint, no auth).",
+
+    "reanchor_enabled": true,
+    "reanchor_breakout_pct": 8.0,
+    "reanchor_after_stopout": true,
+    "min_reshape_hours": 6.0,
+    "_reanchor_note": "reanchor_breakout_pct: if price rises this far above the anchor while flat, move the anchor to current price and rebuild rungs. reanchor_after_stopout: after a hard stop-loss clears and the position is flat, re-anchor at current price. min_reshape_hours: rate-limit volatility-only reshapes.",
+
+    "trend_filter_enabled": true,
+    "trend_ma_days": 20,
+    "trend_pause_buffer_pct": 2.0,
+    "trend_resume_buffer_pct": 1.0,
+    "_trend_note": "Pause opening NEW buys in a downtrend. Dead zone around the MA: turns OFF only when price < MA*(1-pause_buffer%) (so it only reacts to a real downtrend, not price grazing the MA) and back ON when price > MA*(1+resume_buffer%). Wider pause buffer = fewer whipsaws + more grid buys caught in a range; narrower resume = get back in quickly when the downtrend breaks. Set trend_buffer_pct to force one symmetric value. Existing tranches / take-profits are never affected.",
+
+    "vol_spacing_enabled": false,
+    "vol_lookback_days": 20,
+    "vol_reference_daily_pct": 3.0,
+    "vol_mult_min": 0.75,
+    "vol_mult_max": 1.6,
+    "vol_scales_take_profit": true,
+    "_vol_note": "OFF by default -- it makes your fixed 5% spacing dynamic, so enable it deliberately. Grid spacing (and take-profit if vol_scales_take_profit) = base * clamp(realized_daily_vol / vol_reference_daily_pct, vol_mult_min, vol_mult_max). Recomputed only when flat, and only if it moved >10% since last reshape. At the current calm ~2.5% daily vol the multiplier would be ~0.83 (spacing ~4.2%).",
+
+    "max_hold_enabled": true,
+    "max_hold_days": 10,
+    "max_hold_only_if_underwater": true,
+    "max_hold_cooldown_hours": 48,
+    "_hold_note": "Force-close a tranche held longer than max_hold_days (at the current price, not the take-profit). only_if_underwater=true leaves a tranche that's in profit but hasn't hit +TP alone. After a time-stop, that grid level won't rebuy for max_hold_cooldown_hours.",
+
+    "breakout_buy_enabled": false,
+    "breakout_buy_pct": 8.0,
+    "breakout_lookback_hours": 24.0,
+    "breakout_tranche_size_usd": null,
+    "breakout_cooldown_hours": 24.0,
+    "_breakout_note": "OFF by default -- UNTESTED, backtest it before enabling. Buys strength instead of a dip: triggers when price is breakout_buy_pct above its low over the trailing breakout_lookback_hours (a taker/market fill, not a resting limit -- you can't rest a buy above the market). Exit is the SAME take-profit as a normal tranche (+take_profit_pct) OR a breakeven stop (sell at the entry price, taker + slippage) if it falls back first -- without that second exit it would just hold forever with no way to lock in a win. Only one breakout position open at a time; shares the portfolio's capital/day-trade budget with the dip rungs; not gated by the trend filter (a breakout is the opposite signal from a dip-buy). breakout_tranche_size_usd null = reuse grid.tranche_size_usd. After a breakeven-stop exit, waits breakout_cooldown_hours before trying again."
+  },
+
+  "execution": {
+    "mode": "dry_run",
+    "_mode_options": "dry_run = simulated price + simulated fills, no API. live_preview = real Coinbase price/previews/balances but NEVER places orders. confirm = real orders, each one needs y/n in the terminal. live = fully automatic. Only dry_run is implemented so far; the others require the live order lifecycle (not built yet).",
+    "poll_interval_sec": 60,
+    "heartbeat_interval_sec": 300,
+    "fill_model": "resting",
+    "shallow_touch_pct": 0.15,
+    "shallow_fill_prob": 0.5,
+    "market_slippage_bps": 8,
+    "fill_seed": 12345,
+    "_comment": "fill_model: 'resting' (recommended) models resting limit orders -- a buy/take-profit fills only when the price band between two polls crosses its price; a shallow touch (within shallow_touch_pct of the price) fills with probability shallow_fill_prob to model queue position; a grid level re-armed below the market stays inactive until price trades back above it; max-hold exits are taker market orders that pay fee_rate_taker and market_slippage_bps of slippage. 'at_level' / 'at_poll' are the old optimistic instant-fill models, kept for A/B comparison. fill_seed makes the shallow-fill coin-flips reproducible across runs.",
+    "coinbase_key_file": "cdp_api_key.json",
+    "coinbase_portfolio_id": null,
+    "_coinbase_comment": "coinbase_key_file: path to the Secret API Key JSON with the *Trade* permission. coinbase_portfolio_id: the dedicated portfolio's id (get it from `cdp` or the Coinbase UI) so the bot is scoped to only the funded amount - leave null only for the readiness check."
+  },
+
+  "price_feed": {
+    "url": "https://api.coinbase.com/v2/prices/ETH-USD/spot",
+    "timeout_sec": 10
+  },
+
+  "idle_yield": {
+    "enabled": true,
+    "apy_pct": 4.5,
+    "_comment": "DRY-RUN MODELLING ONLY, and off by default. Simulates the rewards you'd earn holding the undeployed capital as USDC. Accrues each poll on (allocated_capital + realized_pnl - deployed) at apy_pct, pro-rated by elapsed time. Tracked in state.yield_earned_usd and shown in the summary. For live, you actually hold USDC and Coinbase pays the rate - the bot code doesn't place any yield trade."
+  },
+
+  "notifications": {
+    "enabled": true,
+    "discord_webhook_url": null,
+    "mention": "@everyone",
+    "mention_events": ["alert", "buy", "sell"],
+    "_comment": "webhook: paste URL here OR set env GRID_BOT_DISCORD_WEBHOOK (env wins). mention: string put in message content so Discord actually pings - '@everyone', '@here', or a role as '<@&ROLE_ID>'; null disables. mention_events: which events ping - any of alert/buy/sell/daily/start/stop, or ['all'] for every message. --test-notify always pings if a mention is set. Fires on start/stop, every BUY/SELL, every alert, daily summary, pause-cleared. A webhook URL is a secret."
+  }
+}

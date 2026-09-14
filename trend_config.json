@@ -1,0 +1,46 @@
+{
+  "asset": "ETH-USD",
+  "allocated_capital_usd": 10000.0,
+
+  "strategy": {
+    "ma_days": 50,
+    "reference_ma_days": [100, 200],
+    "_comment": "Hold ETH while yesterday's daily close > the ma_days simple moving average, else hold 100% USDC. Evaluated ONCE per UTC day, right after rollover, using the completed previous day's close -- this matches backtest_trend.py exactly and avoids intraday whipsaw. reference_ma_days are logged each day for comparison (what MA-100 / MA-200 would say) but never traded."
+  },
+
+  "fees": {
+    "fee_rate_per_side": 0.006,
+    "_comment": "Charged on the full notional of every BUY (cash->ETH) and SELL (ETH->cash)."
+  },
+
+  "risk": {
+    "alert_drawdown_pct": 20.0,
+    "_comment": "Not a hard stop -- exiting to cash on a trend-down signal IS the risk control. This just pings you if the drawdown from peak equity gets deep, so you don't have to watch it. Re-arms once the drawdown recovers to half the threshold."
+  },
+
+  "idle_yield": {
+    "enabled": true,
+    "apy_pct": 4.5,
+    "_comment": "Modelled USDC rewards while in cash. Accrues into cash_usd (so it compounds into the next buy), pro-rated by elapsed time."
+  },
+
+  "execution": {
+    "mode": "dry_run",
+    "poll_interval_sec": 300,
+    "heartbeat_interval_sec": 300,
+    "_comment": "Trend signal only changes once/day, so a 5-min poll is just for price display, the heartbeat, and detecting the day rollover promptly. execution.mode must stay dry_run -- this build places no real orders."
+  },
+
+  "price_feed": {
+    "url": "https://api.coinbase.com/v2/prices/ETH-USD/spot",
+    "timeout_sec": 10
+  },
+
+  "notifications": {
+    "enabled": true,
+    "discord_webhook_url": null,
+    "mention": "@everyone",
+    "mention_events": ["alert", "buy", "sell"],
+    "_comment": "Same shape as the grid bot's config -- env var GRID_BOT_DISCORD_WEBHOOK is reused if discord_webhook_url is null, so both bots post to the same channel without re-entering the URL."
+  }
+}

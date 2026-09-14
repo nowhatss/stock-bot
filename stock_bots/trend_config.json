@@ -1,0 +1,46 @@
+{
+  "asset": "AAPL",
+  "_asset_note": "Placeholder symbol -- change to whatever stock you want to dry-run. Should match config.json's asset only if you want the grid and trend stock bots trading the same thing; they're independent, so it's fine if they don't.",
+  "allocated_capital_usd": 10000.0,
+
+  "strategy": {
+    "ma_days": 50,
+    "reference_ma_days": [100, 200],
+    "_comment": "Hold the stock while yesterday's daily close > the ma_days simple moving average, else hold 100% cash. Evaluated once per UTC day, gated to only actually run while the market is open (see market_hours.py) -- since the market is closed when the UTC day rolls over, the first poll after the next market open is effectively 'once per trading day'. reference_ma_days are logged for comparison only, never traded."
+  },
+
+  "fees": {
+    "fee_rate_per_side": 0.0017,
+    "_comment": "Approximates Questrade's ~$0.01/share (min $4.95, max $9.95) commission for a position around allocated_capital_usd. This is a single full-notional round trip, not a per-tranche fee like the grid bot. Re-check against Questrade's real schedule if you change allocated_capital_usd a lot or trade a very cheap/expensive stock."
+  },
+
+  "risk": {
+    "alert_drawdown_pct": 20.0,
+    "_comment": "Not a hard stop -- exiting to cash on a trend-down signal IS the risk control. Just pings you if drawdown from peak equity gets deep."
+  },
+
+  "idle_yield": {
+    "enabled": false,
+    "apy_pct": 4.0,
+    "_comment": "Off by default. Set to your actual Questrade cash rate before enabling."
+  },
+
+  "execution": {
+    "mode": "dry_run",
+    "poll_interval_sec": 300,
+    "heartbeat_interval_sec": 300,
+    "_comment": "Trend signal only changes once/day, so this poll is mainly for price display, the heartbeat, and detecting market-open promptly. execution.mode must stay dry_run."
+  },
+
+  "price_feed": {
+    "timeout_sec": 10
+  },
+
+  "notifications": {
+    "enabled": true,
+    "discord_webhook_url": null,
+    "mention": "@everyone",
+    "mention_events": ["alert", "buy", "sell"],
+    "_comment": "Same shape as the other bots' config -- env var GRID_BOT_DISCORD_WEBHOOK is reused if discord_webhook_url is null."
+  }
+}

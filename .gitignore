@@ -1,0 +1,24 @@
+# secrets - never commit
+cdp_api_key.json
+cdp_wallet_secret.txt
+*.key
+*.pem
+
+# local runtime
+.venv/
+__pycache__/
+state.json
+state.json.tmp
+trend_state.json
+trend_state.json.tmp
+logs/
+
+# stock bots (Questrade)
+stock_bots/questrade_refresh_token.txt
+stock_bots/state.json
+stock_bots/state.json.tmp
+stock_bots/trend_state.json
+stock_bots/trend_state.json.tmp
+stock_bots/watchlist_state.json
+stock_bots/watchlist_state.json.tmp
+stock_bots/logs/
