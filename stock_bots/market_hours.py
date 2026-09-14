@@ -13,9 +13,20 @@ known holiday, expect a stray iteration that finds no real price movement
 from __future__ import annotations
 
 from datetime import datetime, time as dtime
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-_ET = ZoneInfo("America/New_York")
+try:
+    _ET = ZoneInfo("America/New_York")
+except ZoneInfoNotFoundError as exc:
+    raise RuntimeError(
+        "Could not load timezone data for 'America/New_York'. Windows doesn't ship an "
+        "IANA timezone database the way Linux/Mac do, so Python's zoneinfo module needs "
+        "the separate 'tzdata' package. Fix: run `python -m pip install tzdata` in THIS "
+        "terminal (the one you're using to launch the bot), then try again -- if you "
+        "installed it in a different terminal/user context (e.g. one elevated as "
+        "Administrator), it won't be visible here."
+    ) from exc
+
 _OPEN = dtime(9, 30)
 _CLOSE = dtime(16, 0)
 
