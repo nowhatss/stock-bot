@@ -178,10 +178,11 @@ def get_quotes_batch(symbols: list[str], timeout: int = 10) -> dict[str, float]:
     a symbol is silently omitted if Questrade has no usable price for it this
     call (caller should treat a missing symbol as 'skip this poll for it').
 
-    NOTE: this uses Questrade's comma-separated-ids quote path
-    (v1/markets/quotes/id1,id2,...). Verify this against Questrade's current
-    API reference the first time you run it against a real account -- it
-    hasn't been exercised against a live Questrade account in this repo yet.
+    Uses the `?ids=id1,id2,...` query-parameter form -- confirmed directly
+    against a live account. The comma-separated-ids *path* form
+    (v1/markets/quotes/id1,id2,...) looks superficially similar but returns a
+    400 from Questrade (misleadingly reported as an Accept-header/content-type
+    error), so don't switch back to it.
     """
     ids: list[int] = []
     id_to_symbol: dict[int, str] = {}
@@ -195,7 +196,7 @@ def get_quotes_batch(symbols: list[str], timeout: int = 10) -> dict[str, float]:
     if not ids:
         return {}
     id_str = ",".join(str(i) for i in ids)
-    data = _api_get(f"v1/markets/quotes/{id_str}", timeout=timeout)
+    data = _api_get(f"v1/markets/quotes?ids={id_str}", timeout=timeout)
     out: dict[str, float] = {}
     for q in data.get("quotes", []):
         sid = q.get("symbolId")
