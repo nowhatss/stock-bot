@@ -22,10 +22,12 @@ explicit, separate decision later.
 
 ## Coinbase ETH grid bot — Phase 1 (dry run)
 
-A grid-trading agent for ETH built to the spec you provided. **This build never
-places a real order.** It polls a public ETH‑USD price, runs the full grid +
-risk-rail state machine, simulates fills with a fee assumption, and logs
-everything. Its only job is Phase 1 of your rollout plan.
+A rule-based grid-trading agent for ETH. **This build never places a real
+order.** It polls a public ETH‑USD price, runs the full grid + risk-rail
+state machine, simulates fills with a fee assumption, and logs everything.
+It implements Phase 1 of a three-phase rollout: dry run → confirmed live
+orders → fully automatic (see `execution.mode` ladder below) — only Phase 1
+is built.
 
 ## Files
 
@@ -119,12 +121,12 @@ python grid_bot.py --status      # full state
 python grid_bot.py --summary      # today's P&L
 ```
 
-## How the spec was translated (decisions I made where it was ambiguous)
+## Design decisions
 
 1. **Grid levels are fixed prices off an anchor.** The anchor is the ETH price
    at first start (or set `grid.anchor_price` in config to pin it). Levels are
-   `anchor × 0.95`, `× 0.95²`, `× 0.95³`. "Buy every 5% drop from the last fill"
-   is implemented as these three fixed rungs.
+   `anchor × 0.95`, `× 0.95²`, `× 0.95³` — a "buy every 5% drop" rule
+   implemented as three static rungs rather than a per-fill recalculation.
    - *Consequence:* if you start the bot when ETH is near a local low, price may
      never reach the rungs and nothing trades. That's fine for a dry run — it's
      what you're observing. Re-pin the anchor if needed.
@@ -139,8 +141,8 @@ python grid_bot.py --summary      # today's P&L
 5. **Reset:** when a tranche sells, its rung is re-armed and will buy again if
    price drops back to it.
 6. **`max_trades_per_day` (7) caps BUYS only.** Take-profit sells are always
-   allowed — you never want a counter to block you from taking profit or (later)
-   stopping out. Both counts are shown separately in the summary.
+   allowed, so a trading cap never blocks taking profit or (later) stopping
+   out. Both counts are shown separately in the summary.
 
 ## Adaptive features (`config.json` → `adaptations`)
 
@@ -236,16 +238,16 @@ per-rung fills + P&L, adaptation/rail activity, max drawdown — plus **flags**
 "only N cycles — not conclusive").
 
 **Run it monthly, or after ~50 completed cycles — not every few days.** Fewer
-data points than that and any "pattern" is noise. When you want changes made,
-send the report over and it comes back as recommendations + a specific A/B to run.
-`analyze.py` changes nothing itself.
+data points than that and any "pattern" is noise. Use the flagged issues to
+decide what to test next — a targeted A/B backtest is usually the fastest way
+to confirm whether a change actually helps. `analyze.py` changes nothing itself.
 
 ## What the risk rails actually do
 
 | Rail | Trigger | Action |
 |---|---|---|
 | Max capital deployed | open tranches + next tranche > **$90** | that buy is skipped |
-| Hard stop-loss | total drawdown (realized + unrealized, incl. est. exit fees) > **50%** of $100 | `halted = true`: **stop all buying**, alert. Open tranches are **kept** — per your spec ("do not average down further"). This is a *buying halt, not a liquidation*: your money stays at risk in the open tranches. |
+| Hard stop-loss | total drawdown (realized + unrealized, incl. est. exit fees) > **50%** of $100 | `halted = true`: **stop all buying**, alert. Open tranches are **kept intentionally**, to avoid averaging down further into a losing position. This is a *buying halt, not a liquidation*: funds stay at risk in the open tranches. |
 | Max daily loss | day P&L loss > **40%** of $100 | `paused = true`: stop **everything** (no buys, no sells), alert. Auto-clears at the next UTC day rollover, or clear `"paused": false` in `state.json` after review. |
 | Max buys/day | 7 buys in a UTC day | further buys skipped until rollover |
 
@@ -262,9 +264,10 @@ python simulate.py oscillate
 - **oscillate** — ±12% sine wave. Grid completes buy→sell cycles, small net gain
   after fees. This is the case the strategy is built for.
 - **downtrend** — slow 35% grind down. Bot buys all 3 rungs and sits underwater
-  with no sells. This is the documented weakness from your Section 7.
-- **crash** — 55% straight down. Both the max-daily-loss and hard-stop-loss rails
-  fire. Verify the alerts look right to you.
+  with no sells. This is the fixed-grid design's known weakness — see
+  "Known limitations" below.
+- **crash** — 55% straight down. Both the max-daily-loss and hard-stop-loss
+  rails fire — useful for confirming the alerts trigger as expected.
 
 Writes separate `logs/sim_<scenario>_*` files; does not touch live state.
 
@@ -285,7 +288,7 @@ lowest tier — $0.18 on a $30 tranche).
 
 ### `execution.mode` ladder
 
-| mode | price | orders | maps to your rollout |
+| mode | price | orders | rollout phase |
 |---|---|---|---|
 | `dry_run` | public feed | simulated | **Phase 1** — the only mode built so far |
 | `live_preview` | real Coinbase | real *previews* only, never places | pre-Phase-2 connectivity soak |
@@ -296,22 +299,24 @@ lowest tier — $0.18 on a $30 tranche).
 orders → poll for fill → place take-profit → cancel-on-halt). **Not built yet** —
 that's the next increment, after `check_venue.py` passes.
 
-### What you need to do for live
+### What's needed before going live
 
-1. **API key with Trade permission.** Your existing `cdp_api_key.json` already
-   authenticates and can preview orders. Confirm it has *Trade* (not just View)
-   at https://portal.cdp.coinbase.com/access/api — or make a new Secret API Key
-   with Trade enabled and point `execution.coinbase_key_file` at it.
-2. **Dedicated portfolio.** Create a separate Coinbase portfolio, move exactly
-   $100 in, and put its id in `execution.coinbase_portfolio_id`. This scopes the
-   bot so it can never touch your main funds.
-3. Complete Phases 1–2 of your rollout before setting `mode: "live"`.
+1. **API key with Trade permission.** A Coinbase Advanced Trade Secret API
+   Key JSON (`cdp_api_key.json`) authenticates and can preview orders. Confirm
+   it has *Trade* (not just View) at https://portal.cdp.coinbase.com/access/api
+   — or create a new Secret API Key with Trade enabled and point
+   `execution.coinbase_key_file` at it.
+2. **Dedicated portfolio.** Create a separate Coinbase portfolio, move only
+   the capital intended for this strategy into it, and put its id in
+   `execution.coinbase_portfolio_id`. This scopes the bot so it can never
+   touch funds outside that portfolio.
+3. Complete Phases 1–2 before setting `mode: "live"`.
 
-I do **not** run the live process or place live orders — not with per-order
-confirmation, not in `live` mode. I build and test the code; you start it and
-own its trades.
+This build intentionally stops at Phase 1: it never places a real order,
+under any mode or configuration, with or without per-order confirmation.
+The live order lifecycle (Phases 2/3) is deliberately not implemented here.
 
-## Known limitations (beyond your Section 7)
+## Known limitations
 
 - Single fixed anchor; no automatic re-anchoring on a sustained rally.
 - Price feed is a single unauthenticated endpoint; a feed outage just skips the

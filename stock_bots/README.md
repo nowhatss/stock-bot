@@ -175,7 +175,7 @@ the live config or `watchlist_state.json`.
   (re-anchor, profit-lock, stop-loss) have each been through their own
   equity-specific backtests and are enabled by default; see the section above.
 
-## Canada-specific notes (recap from the earlier conversation)
+## Notes for Canadian users
 
 - **No US Pattern Day Trader rule**: PDT (the $25k / 3-day-trade cap) is a
   FINRA rule for US broker-dealers. Trading through Questrade puts you under
