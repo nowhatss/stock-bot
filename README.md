@@ -30,28 +30,43 @@ Start, stop, and check on all three bots (`cryptogrid`, `cryptotrend`,
 
 This is a **separate Discord bot** from the webhook the bots already use for
 notifications — a webhook can only send messages, so receiving a command back
-needs a real bot connection instead. The controller only launches or kills the
-existing bot scripts as plain subprocesses (the same as running
-`python grid_bot.py` yourself); it never imports the trading engines and never
-touches an order. It only acts on the single Discord user ID you configure as
-`owner_id` — anyone else gets "Not authorized."
+needs a real bot connection instead. The two are intentionally kept separate
+rather than merged into one credential: a webhook is a simpler, dependency-free
+mechanism for the trading scripts to push notifications, and the bot is the
+only piece that needs the heavier `discord.py` gateway connection. The
+controller only launches or kills the existing bot scripts as plain
+subprocesses (the same as running `python grid_bot.py` yourself); it never
+imports the trading engines and never touches an order. It only acts on the
+single Discord user ID you configure as `owner_id` — anyone else gets "Not
+authorized."
+
+Before starting a bot, `/start` scans running processes (not just what the
+controller itself launched) and refuses if that bot is already running —
+whether you started it yourself in a terminal, via a previous `/start`, or at
+Windows logon — since two copies writing the same `state.json` at once would
+corrupt it.
 
 **Setup:**
 
 1. Go to the [Discord Developer Portal](https://discord.com/developers/applications) →
    **New Application** → name it anything.
 2. **Bot** tab → **Reset Token** → copy it. Treat this like a password.
+   While here, turn **Public Bot** off (Authorization Flow section) so only
+   you can ever install it — you'll need the **Installation** tab's Install
+   Link set to **None** first, since Discord won't let a bot be both private
+   and have a default install link.
 3. **OAuth2 → URL Generator** → scopes: `bot` and `applications.commands`;
    bot permissions: **Send Messages**. Open the generated URL and invite the
    bot to your own server.
 4. Get your Discord user ID: **User Settings → Advanced → Developer Mode**
-   (on), then right-click your own name anywhere → **Copy User ID**.
+   (on), then right-click your own name anywhere → **Copy User ID**. Also
+   grab your server ID the same way (right-click the server icon) if you want
+   new/changed commands to show up instantly instead of up to an hour later.
 5. Copy `discord_controller_config.example.json` to
-   `discord_controller_config.json` and fill in `bot_token` and `owner_id`
-   (and optionally `guild_id` — your server's ID — so new commands show up
-   instantly instead of up to an hour later). That file is gitignored.
+   `discord_controller_config.json` and fill in `bot_token`, `owner_id`, and
+   optionally `guild_id`. That file is gitignored.
 6. `pip install -r requirements.txt` (adds `discord.py`).
-7. Run it, and leave it running in its own terminal:
+7. Run it:
    ```
    python discord_controller.py
    ```
@@ -66,6 +81,22 @@ get stopping a bot yourself — safe, since every bot saves `state.json` after
 each poll rather than only at exit, but it means the bot won't post its own
 "stopped" Discord message; the controller's reply to `/stop` is the
 confirmation instead.
+
+### Running it automatically at Windows logon (optional)
+
+To avoid keeping a terminal open, add a shortcut to the Startup folder
+(`Win+R` → `shell:startup`) pointing at:
+
+- Target: `pythonw.exe` (not `python.exe` — no console window)
+- Arguments: the full path to `discord_controller.py`
+
+`schtasks`/Task Scheduler's logon and startup triggers are commonly blocked
+by third-party antivirus (behavioral heuristics flag programmatic autostart
+registration) even for a legitimate personal tool — a Startup-folder shortcut
+achieves the same result without touching Task Scheduler at all. If your
+antivirus flags the shortcut or `discord_controller.py` itself, you can add
+them (and `python.exe`/`pythonw.exe`) to its exceptions list — it's the same
+script you've already reviewed.
 
 ## Coinbase ETH grid bot — Phase 1 (dry run)
 
