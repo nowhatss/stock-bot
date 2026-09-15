@@ -35,7 +35,6 @@ from discord import app_commands
 HERE = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(HERE, "discord_controller_config.json")
 LOG_DIR = os.path.join(HERE, "logs")
-STATE_PATH = os.path.join(LOG_DIR, "controller_state.json")
 
 BOTS = {
     "cryptogrid": {
@@ -77,43 +76,70 @@ def load_config() -> dict:
     return cfg
 
 
-def _load_state() -> dict:
-    if not os.path.exists(STATE_PATH):
-        return {}
-    try:
-        with open(STATE_PATH, encoding="utf-8") as fh:
-            return json.load(fh)
-    except Exception:
-        return {}
-
-
-def _save_state(state: dict) -> None:
-    os.makedirs(LOG_DIR, exist_ok=True)
-    tmp = STATE_PATH + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(state, fh, indent=2)
-    os.replace(tmp, STATE_PATH)
-
-
-def _pid_alive(pid: int) -> bool:
-    """No extra dependency (e.g. psutil) -- shells out to tasklist, which
-    ships with every Windows install."""
+def _query_python_processes(timeout: int = 15) -> list[dict]:
+    """Live OS process scan instead of a JSON tracking file -- a JSON file only
+    knows about processes *this controller* launched, so it'd miss a bot you
+    started manually in a terminal, from the Startup-folder shortcut, or via a
+    previous controller run. Scanning live processes catches all of those, so
+    /start can correctly refuse to launch a second copy of the same bot no
+    matter how the first one was started (two processes writing the same
+    state.json at once would corrupt it)."""
+    ps_cmd = (
+        "Get-CimInstance Win32_Process -Filter \"Name='python.exe' or Name='pythonw.exe'\" "
+        "| Select-Object ProcessId,CommandLine,CreationDate | ConvertTo-Json -Compress"
+    )
     try:
         out = subprocess.run(
-            ["tasklist", "/FI", f"PID eq {pid}"],
-            capture_output=True, text=True, timeout=5,
+            ["powershell", "-NoProfile", "-Command", ps_cmd],
+            capture_output=True, text=True, timeout=timeout,
+            creationflags=_CREATE_NO_WINDOW,
         )
+        data = json.loads(out.stdout or "[]")
     except Exception:
-        return False
-    return str(pid) in out.stdout
+        return []
+    if isinstance(data, dict):  # PowerShell unwraps a single match to an object, not a list
+        data = [data]
+    return data
+
+
+def _parse_cim_date(raw: str | None) -> str:
+    """CIM CreationDate comes back from ConvertTo-Json as '/Date(<ms since epoch>)/'."""
+    if not raw:
+        return "unknown"
+    try:
+        ms = int(raw.split("(")[-1].split(")")[0].split("+")[0].split("-")[0])
+        return dt.datetime.fromtimestamp(ms / 1000, tz=dt.timezone.utc).isoformat()
+    except Exception:
+        return "unknown"
+
+
+def _find_running(script_path: str) -> dict | None:
+    """Matches by script *basename* (not full path) so this catches a bot
+    started with a relative path (e.g. `python grid_bot.py` run from inside
+    the folder) as well as an absolute one. The three controlled scripts'
+    basenames don't collide with each other (grid_bot.py / trend_bot.py /
+    grid_bot_watchlist.py all have distinct suffixes right after the shared
+    prefix), so a substring match is unambiguous here."""
+    needle = os.path.basename(script_path).lower()
+    for proc in _query_python_processes():
+        cmdline = (proc.get("CommandLine") or "").lower()
+        if needle in cmdline:
+            return {
+                "pid": proc["ProcessId"],
+                "started_at": _parse_cim_date(proc.get("CreationDate")),
+            }
+    return None
 
 
 def _start_process(key: str) -> str:
-    state = _load_state()
-    existing = state.get(key)
     label = BOTS[key]["label"]
-    if existing and _pid_alive(existing["pid"]):
-        return f"{label} is already running (PID {existing['pid']})."
+    running = _find_running(BOTS[key]["script"])
+    if running:
+        return (
+            f"{label} is already running (PID {running['pid']}) -- started manually, via "
+            f"a previous /start, or at Windows logon. Refusing to start a second copy: two "
+            f"instances writing the same state.json at once would corrupt it."
+        )
 
     spec = BOTS[key]
     os.makedirs(LOG_DIR, exist_ok=True)
@@ -128,11 +154,6 @@ def _start_process(key: str) -> str:
             stderr=subprocess.STDOUT,
             creationflags=_CREATE_NO_WINDOW,
         )
-    state[key] = {
-        "pid": proc.pid,
-        "started_at": dt.datetime.now(dt.timezone.utc).isoformat(),
-    }
-    _save_state(state)
     return (
         f"Started {label} (PID {proc.pid}). If it exits immediately (bad config, "
         f"missing token, etc.) `/status` will show it as not running -- check "
@@ -141,19 +162,14 @@ def _start_process(key: str) -> str:
 
 
 def _stop_process(key: str) -> str:
-    state = _load_state()
-    existing = state.get(key)
     label = BOTS[key]["label"]
-    if not existing or not _pid_alive(existing["pid"]):
-        state.pop(key, None)
-        _save_state(state)
+    running = _find_running(BOTS[key]["script"])
+    if not running:
         return f"{label} is not running."
 
-    pid = existing["pid"]
+    pid = running["pid"]
     subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
                     capture_output=True, timeout=10)
-    state.pop(key, None)
-    _save_state(state)
     return (
         f"Stopped {label} (PID {pid}). Its state.json was already saved as of its "
         f"last poll, so nothing is lost -- but this is a hard kill, not the graceful "
@@ -163,11 +179,10 @@ def _stop_process(key: str) -> str:
 
 
 def _status_line(key: str) -> str:
-    state = _load_state()
-    existing = state.get(key)
     label = BOTS[key]["label"]
-    if existing and _pid_alive(existing["pid"]):
-        return f"🟢 **{label}** -- running (PID {existing['pid']}, started {existing['started_at']})"
+    running = _find_running(BOTS[key]["script"])
+    if running:
+        return f"🟢 **{label}** -- running (PID {running['pid']}, started {running['started_at']})"
     return f"⚪ **{label}** -- not running"
 
 
