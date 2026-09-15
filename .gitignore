@@ -1,6 +1,7 @@
 # secrets - never commit
 cdp_api_key.json
 cdp_wallet_secret.txt
+discord_controller_config.json
 *.key
 *.pem
 

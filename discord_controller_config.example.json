@@ -1,0 +1,6 @@
+{
+  "bot_token": "PASTE_YOUR_DISCORD_BOT_TOKEN_HERE",
+  "owner_id": "PASTE_YOUR_DISCORD_USER_ID_HERE",
+  "guild_id": null,
+  "_comment": "bot_token: Discord Developer Portal -> your application -> Bot -> Reset Token (treat like a password). owner_id: your own Discord user ID -- only this user can run /start /stop /status; enable Developer Mode in Discord (Settings -> Advanced), then right-click your own name -> Copy User ID. guild_id: optional, your server's ID -- makes new/changed commands show up instantly instead of waiting up to an hour for Discord's global sync; leave null if you don't want to bother. Copy this file to discord_controller_config.json and fill it in there -- that file is gitignored, this example is not."
+}

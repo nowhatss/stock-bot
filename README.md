@@ -22,6 +22,51 @@ portfolio level, every new feature defaults **off** until it's been backtested
 and someone deliberately turns it on, and nothing runs live without an
 explicit, separate decision later.
 
+## Remote control via Discord (`discord_controller.py`)
+
+Start, stop, and check on all three bots (`cryptogrid`, `cryptotrend`,
+`watchlist`) from a phone, using Discord slash commands: `/start`, `/stop`,
+`/status`, each with a dropdown to pick which bot.
+
+This is a **separate Discord bot** from the webhook the bots already use for
+notifications — a webhook can only send messages, so receiving a command back
+needs a real bot connection instead. The controller only launches or kills the
+existing bot scripts as plain subprocesses (the same as running
+`python grid_bot.py` yourself); it never imports the trading engines and never
+touches an order. It only acts on the single Discord user ID you configure as
+`owner_id` — anyone else gets "Not authorized."
+
+**Setup:**
+
+1. Go to the [Discord Developer Portal](https://discord.com/developers/applications) →
+   **New Application** → name it anything.
+2. **Bot** tab → **Reset Token** → copy it. Treat this like a password.
+3. **OAuth2 → URL Generator** → scopes: `bot` and `applications.commands`;
+   bot permissions: **Send Messages**. Open the generated URL and invite the
+   bot to your own server.
+4. Get your Discord user ID: **User Settings → Advanced → Developer Mode**
+   (on), then right-click your own name anywhere → **Copy User ID**.
+5. Copy `discord_controller_config.example.json` to
+   `discord_controller_config.json` and fill in `bot_token` and `owner_id`
+   (and optionally `guild_id` — your server's ID — so new commands show up
+   instantly instead of up to an hour later). That file is gitignored.
+6. `pip install -r requirements.txt` (adds `discord.py`).
+7. Run it, and leave it running in its own terminal:
+   ```
+   python discord_controller.py
+   ```
+
+No inbound port or forwarding is needed — like the bots' own webhook calls,
+this only makes an outbound connection to Discord. It does, however, need to
+**stay running on your PC**: if the PC is off or asleep, phone commands won't
+reach it until you restart it.
+
+`/stop` is a hard kill (`taskkill`), not the graceful Ctrl+C shutdown you'd
+get stopping a bot yourself — safe, since every bot saves `state.json` after
+each poll rather than only at exit, but it means the bot won't post its own
+"stopped" Discord message; the controller's reply to `/stop` is the
+confirmation instead.
+
 ## Coinbase ETH grid bot — Phase 1 (dry run)
 
 A rule-based grid-trading agent for ETH. **This build never places a real

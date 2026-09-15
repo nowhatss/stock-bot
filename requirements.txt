@@ -6,3 +6,12 @@
 #   .venv\Scripts\python -m pip install -r requirements.txt
 #
 coinbase-advanced-py==1.8.4
+
+# Only needed for discord_controller.py (optional remote start/stop/status via
+# Discord slash commands). None of the bots themselves need this -- they only
+# use the Discord *webhook* (stdlib urllib), which has no dependency.
+discord.py==2.4.0
+# discord.py imports the stdlib `audioop` module for voice support (unused here)
+# at load time; Python 3.13+ removed audioop from the standard library, so on
+# 3.13+ this backport is required just to let `import discord` succeed.
+audioop-lts==0.2.2; python_version >= "3.13"
