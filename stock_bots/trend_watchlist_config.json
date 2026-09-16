@@ -1,0 +1,47 @@
+{
+  "watchlist_symbols": ["AVGO", "AMD", "NVDA", "ARM", "INTC", "MRVL", "QCOM"],
+  "_watchlist_note": "Same starting list as watchlist_config.json's grid bot -- this is its own independent config, so editing one list does not touch the other.",
+
+  "allocated_capital_usd": 10000.0,
+  "_allocation_note": "Split into N EQUAL, FIXED slots -- one per watchlist symbol (currently $1,428.57 each across 7 symbols) -- sized once at first run and never rebalanced between symbols afterward. This is simpler than continuously rebalancing to keep weights equal as the qualifying set changes day to day (which would mean partial-selling a winner just to buy more of a new entrant), at the cost of not being a literal 'divide the whole pool across however many currently qualify' scheme -- a day with only 2 of 7 symbols trending only ever has those 2 slots invested; the other 5 slots sit in their own idle cash rather than doubling up the 2 that qualify.",
+
+  "strategy": {
+    "ma_days": 50,
+    "_comment": "Each symbol: hold it while yesterday's daily close > its OWN ma_days simple moving average, else hold that symbol's slot in cash. Evaluated once per UTC day (gated to when the market's open), using each symbol's own completed previous close -- same timing convention as ../trend_bot.py, so live behaviour matches what backtest_trend_watchlist.py tests."
+  },
+
+  "fees": {
+    "fee_rate_per_side": 0.0017,
+    "_comment": "Same Questrade commission approximation as the other stock bots -- see stock_bots/README.md."
+  },
+
+  "risk": {
+    "alert_drawdown_pct": 20.0,
+    "_comment": "Not a hard stop -- exiting a symbol to cash on its own trend-down signal IS that symbol's risk control. This just pings you if TOTAL portfolio drawdown from peak equity gets deep, so you don't have to watch it. Re-arms once drawdown recovers to half the threshold."
+  },
+
+  "idle_yield": {
+    "enabled": false,
+    "apy_pct": 4.0,
+    "_comment": "Off by default, same as the single-symbol stock trend bot -- set to your actual Questrade cash rate before enabling."
+  },
+
+  "execution": {
+    "mode": "dry_run",
+    "poll_interval_sec": 300,
+    "heartbeat_interval_sec": 300,
+    "_comment": "The trend signal only changes once/day per symbol, so this poll interval is mainly for price display, the heartbeat, and detecting market-open/day-rollover promptly. execution.mode must stay dry_run -- this build places no real orders."
+  },
+
+  "price_feed": {
+    "timeout_sec": 10
+  },
+
+  "notifications": {
+    "enabled": true,
+    "discord_webhook_url": null,
+    "mention": "@everyone",
+    "mention_events": ["alert", "buy", "sell"],
+    "_comment": "Same shape as the other bots' config -- env var GRID_BOT_DISCORD_WEBHOOK is reused if discord_webhook_url is null."
+  }
+}
