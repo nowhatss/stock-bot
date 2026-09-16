@@ -22,4 +22,6 @@ stock_bots/trend_state.json
 stock_bots/trend_state.json.tmp
 stock_bots/watchlist_state.json
 stock_bots/watchlist_state.json.tmp
+stock_bots/trend_watchlist_state.json
+stock_bots/trend_watchlist_state.json.tmp
 stock_bots/logs/

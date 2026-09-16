@@ -145,6 +145,53 @@ each report's methodology note for what that means for accuracy. Every flag
 overrides `watchlist_config.json` for that run only; nothing it does touches
 the live config or `watchlist_state.json`.
 
+## 5. The trend watchlist bot (`trend_bot_watchlist.py`)
+
+Runs the same daily-MA trend rule as `trend_bot_stock.py` across the whole
+watchlist at once instead of one fixed symbol. Each symbol gets its own
+**fixed, equal slice** of `allocated_capital_usd` (`allocated_capital_usd /
+number of watchlist symbols`) and independently holds that symbol while
+yesterday's close is above its own N-day moving average, otherwise sits in
+cash — so it can hold anywhere from 0 to every symbol in the watchlist at
+once. Unlike the grid watchlist bot, there's no shared capital pool or
+cross-symbol ranking: every symbol trades its own fixed sleeve regardless of
+what the others are doing. What is shared is one process, one state file, one
+Discord channel, and one combined equity/drawdown figure.
+
+**Design choice worth knowing**: slots are sized once and never rebalanced
+against each other. A day where only 2 of 7 symbols are trending up only ever
+deploys those 2 slots' capital — the other 5 slots' cash sits idle rather than
+doubling up into the 2 that qualify. Continuously rebalancing to keep weights
+equal as the qualifying set changes would mean partial-selling a winner just
+to fund a new entrant, which is real added complexity and fee-churn for a
+question this build doesn't try to answer yet.
+
+```bash
+python trend_bot_watchlist.py             # continuous loop
+python trend_bot_watchlist.py --once      # single check; no-op if market closed
+python trend_bot_watchlist.py --summary
+python backtest_trend_watchlist.py --months 24   # replays real Questrade daily
+                                                  # closes through the actual
+                                                  # production code
+```
+
+Run `python test_trend_watchlist.py` any time to re-verify (33 checks).
+
+**24-month backtest** (AVGO, AMD, NVDA, ARM, INTC, MRVL, QCOM; 50-day MA;
+$10,000 total, $1,428.57/symbol slot): **+$7,266 (+72.7%)** over the window,
+but very unevenly across symbols — MRVL/ARM/AMD/INTC/AVGO were solidly
+profitable, while NVDA (50 trades) and QCOM (37 trades) each came out roughly
+flat-to-negative despite the underlying stock's own gains, because a plain
+MA-crossover rule whipsaws hard (a flip on every small wiggle across the MA
+line) during choppier stretches — a known weakness of simple trend-following,
+not specific to this implementation. 224 total trades over 2 years across 7
+symbols is a meaningfully higher turnover (and fee drag) than the single-symbol
+trend bot sees, precisely because 7 independent MA lines each generate their
+own false signals. Treat this as a first look, not a tuned/validated setup —
+nothing here has been through the kind of parameter sweep (MA length, a
+whipsaw filter, etc.) the grid watchlist bot's take-profit/stop-loss went
+through before being trusted.
+
 ## What's actually different from the crypto bots
 
 - **Price/candle feed**: Questrade's OAuth-authenticated quote and candle
